@@ -71,3 +71,47 @@ jobs:
         with:
           name: multitest-${{ matrix.goos }}-${{ matrix.goarch }}
           path: dist/*
+
+  update-docs:
+    needs: build
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.27"
+          cache: false
+
+      - name: Régénère la section "Usage" du README depuis multitest help
+        run: |
+          go build -o multitest .
+          USAGE="$(./multitest help)"
+          python3 - "$USAGE" <<'PY'
+          import re, sys, pathlib
+
+          usage = sys.argv[1]
+          readme = pathlib.Path("README.md")
+          text = readme.read_text()
+          block = "<!-- usage:start -->\n```\n" + usage + "\n```\n<!-- usage:end -->"
+          new_text = re.sub(
+              r"<!-- usage:start -->\n```\n.*?\n```\n<!-- usage:end -->",
+              block,
+              text,
+              flags=re.S,
+          )
+          readme.write_text(new_text)
+          PY
+
+      - name: Commit si le README a changé
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add README.md
+          if ! git diff --cached --quiet; then
+            git commit -m "docs: régénère la section Usage du README [skip ci]"
+            git push
+          fi

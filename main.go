@@ -16,6 +16,7 @@ func usage() {
 	fmt.Println("  multitest                               (mode interactif)")
 	fmt.Println("  multitest test <langage|all> [chemin]   (langages: python, react, php, typescript)")
 	fmt.Println("  multitest list                          (langages supportés)")
+	fmt.Println("  multitest help                          (affiche cette aide)")
 }
 
 func main() {
@@ -25,6 +26,9 @@ func main() {
 	}
 
 	switch os.Args[1] {
+	case "help", "-h", "--help":
+		usage()
+
 	case "list":
 		for name := range runner.All() {
 			fmt.Println(name)
