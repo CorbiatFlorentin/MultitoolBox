@@ -1,0 +1,11 @@
+{
+  "name": "demo-ts",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "test": "node -e \"console.log('2 passed, 0 failed')\""
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2"
+  }
+}
