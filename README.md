@@ -44,6 +44,18 @@ Chaque push/PR sur `main` déclenche `.github/workflows/ci.yml` :
 - la section "Usage" ci-dessus est régénérée automatiquement à partir de
   `multitest help` et commitée si elle a changé
 
+## Release
+
+Pousser un tag `v*` (ex. `v0.1.0`) déclenche `.github/workflows/release.yml` :
+il rebuild les 4 binaires (windows-amd64, linux-amd64, darwin-amd64,
+darwin-arm64) et crée une [Release GitHub](../../releases) avec ces binaires
+attachés et des notes générées automatiquement à partir des commits.
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
 ## Ajouter un langage
 
 Implémenter l'interface `runner.Runner` (`Name`, `Detect`, `Test`) dans
