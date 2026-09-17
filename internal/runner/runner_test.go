@@ -3,6 +3,7 @@ package runner
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -110,6 +111,128 @@ func TestReactDetect(t *testing.T) {
 			t.Error("Detect() = true, want false sans package.json")
 		}
 	})
+}
+
+func TestPythonTestInvokesPytest(t *testing.T) {
+	out := withFakeCommand(t, "python", 0)
+	var r pythonRunner
+
+	if err := r.Test(t.TempDir()); err != nil {
+		t.Fatalf("Test() a retourné une erreur inattendue: %v", err)
+	}
+	if got, want := readOut(t, out), "-m pytest"; got != want {
+		t.Errorf("arguments passés à python = %q, want %q", got, want)
+	}
+}
+
+func TestPythonTestPropagatesFailure(t *testing.T) {
+	withFakeCommand(t, "python", 1)
+	var r pythonRunner
+
+	if err := r.Test(t.TempDir()); err == nil {
+		t.Error("Test() = nil, want une erreur quand pytest échoue")
+	}
+}
+
+func TestReactTestInvokesNpmTest(t *testing.T) {
+	out := withFakeCommand(t, "npm", 0)
+	var r reactRunner
+
+	if err := r.Test(t.TempDir()); err != nil {
+		t.Fatalf("Test() a retourné une erreur inattendue: %v", err)
+	}
+	if got, want := readOut(t, out), "test --silent"; got != want {
+		t.Errorf("arguments passés à npm = %q, want %q", got, want)
+	}
+}
+
+func TestReactTestPropagatesFailure(t *testing.T) {
+	withFakeCommand(t, "npm", 1)
+	var r reactRunner
+
+	if err := r.Test(t.TempDir()); err == nil {
+		t.Error("Test() = nil, want une erreur quand npm test échoue")
+	}
+}
+
+func TestPhpTestFallsBackToComposer(t *testing.T) {
+	out := withFakeCommand(t, "composer", 0)
+	var r phpRunner
+
+	// Pas de vendor/bin/phpunit : doit retomber sur "composer test".
+	if err := r.Test(t.TempDir()); err != nil {
+		t.Fatalf("Test() a retourné une erreur inattendue: %v", err)
+	}
+	if got, want := readOut(t, out), "test"; got != want {
+		t.Errorf("arguments passés à composer = %q, want %q", got, want)
+	}
+}
+
+func TestPhpTestPropagatesFailure(t *testing.T) {
+	withFakeCommand(t, "composer", 1)
+	var r phpRunner
+
+	if err := r.Test(t.TempDir()); err == nil {
+		t.Error("Test() = nil, want une erreur quand composer test échoue")
+	}
+}
+
+func TestTypescriptTestMissingTsc(t *testing.T) {
+	dir := t.TempDir()
+	var r typescriptRunner
+
+	err := r.Test(dir)
+	if err == nil {
+		t.Fatal("Test() = nil, want une erreur quand typescript n'est pas installé")
+	}
+	if !strings.Contains(err.Error(), "n'est pas installé") {
+		t.Errorf("message d'erreur = %q, want qu'il mentionne l'absence d'installation", err.Error())
+	}
+}
+
+func TestTypescriptTestRunsTscThenNpmTest(t *testing.T) {
+	dir := t.TempDir()
+	tscDir := filepath.Join(dir, "node_modules", "typescript", "bin")
+	if err := os.MkdirAll(tscDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, tscDir, "tsc", "")
+
+	nodeOut := withFakeCommand(t, "node", 0)
+	npmOut := withFakeCommand(t, "npm", 0)
+
+	var r typescriptRunner
+	if err := r.Test(dir); err != nil {
+		t.Fatalf("Test() a retourné une erreur inattendue: %v", err)
+	}
+
+	wantSuffix := filepath.Join("node_modules", "typescript", "bin", "tsc") + " --noEmit"
+	if got := readOut(t, nodeOut); !strings.HasSuffix(got, wantSuffix) {
+		t.Errorf("arguments passés à node = %q, want un suffixe %q", got, wantSuffix)
+	}
+	if got, want := readOut(t, npmOut), "test --silent"; got != want {
+		t.Errorf("arguments passés à npm = %q, want %q", got, want)
+	}
+}
+
+func TestTypescriptTestStopsIfTscFails(t *testing.T) {
+	dir := t.TempDir()
+	tscDir := filepath.Join(dir, "node_modules", "typescript", "bin")
+	if err := os.MkdirAll(tscDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, tscDir, "tsc", "")
+
+	withFakeCommand(t, "node", 1) // tsc --noEmit échoue
+	npmOut := withFakeCommand(t, "npm", 0)
+
+	var r typescriptRunner
+	if err := r.Test(dir); err == nil {
+		t.Error("Test() = nil, want une erreur quand tsc échoue")
+	}
+	if _, err := os.Stat(npmOut); err == nil {
+		t.Error("npm test a été appelé alors que tsc a déjà échoué")
+	}
 }
 
 func TestRegistry(t *testing.T) {
