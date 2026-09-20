@@ -86,25 +86,28 @@ func interactive() {
 	reader := bufio.NewReader(os.Stdin)
 
 	fmt.Println("=== multitest ===")
-	fmt.Println("Lance les tests d'un projet, quel que soit son langage (python, react, php, typescript).")
+	fmt.Println("Lance les tests d'un projet, quel que soit son langage (python, react, php, typescript, all).")
+	fmt.Println("Tape 'list' pour voir les langages supportés, 'q' pour quitter.")
 	fmt.Println()
 
 	for {
-		fmt.Println("1) Lister les langages supportés")
-		fmt.Println("2) Tester un projet")
-		fmt.Println("3) Quitter")
-		fmt.Print("> ")
+		fmt.Print("Langage : ")
+		lang := readLine(reader)
 
-		switch readLine(reader) {
-		case "1":
+		switch lang {
+		case "":
+			continue
+
+		case "q", "quit", "exit":
+			fmt.Println("À bientôt !")
+			return
+
+		case "list":
 			for name := range runner.All() {
 				fmt.Println(" -", name)
 			}
 
-		case "2":
-			fmt.Print("Langage (python/react/php/typescript/all) : ")
-			lang := readLine(reader)
-
+		default:
 			fmt.Print("Chemin du projet (vide = dossier courant) : ")
 			dir := readLine(reader)
 			if dir == "" {
@@ -114,13 +117,6 @@ func interactive() {
 			if err := runTest(lang, dir); err != nil {
 				fmt.Println("Erreur:", err)
 			}
-
-		case "3", "q", "quit", "exit":
-			fmt.Println("À bientôt !")
-			return
-
-		default:
-			fmt.Println("Choix invalide.")
 		}
 
 		fmt.Println()
