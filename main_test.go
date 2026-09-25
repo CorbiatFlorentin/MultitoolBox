@@ -1,10 +1,15 @@
 package main
 
 import (
+	"bytes"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"multitest/internal/runner"
 )
@@ -103,4 +108,111 @@ func TestRunTestAllNoProjectDetected(t *testing.T) {
 	if err := runTest("all", t.TempDir()); err != nil {
 		t.Errorf("runTest(\"all\") sur un dossier vide = %v, want nil", err)
 	}
+}
+
+func TestRunTestMissingDir(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "n-existe-pas")
+	for _, target := range []string{"all", "python"} {
+		t.Run(target, func(t *testing.T) {
+			err := runTest(target, missing)
+			if err == nil || !strings.Contains(err.Error(), "dossier introuvable") {
+				t.Errorf("runTest(%q, dossier absent) = %v, want \"dossier introuvable\"", target, err)
+			}
+		})
+	}
+}
+
+func TestRunTestPathIsAFile(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "fichier.txt")
+	if err := os.WriteFile(file, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := runTest("all", file); err == nil {
+		t.Error("runTest() = nil, want une erreur quand le chemin est un fichier")
+	}
+}
+
+func TestParseTestArgs(t *testing.T) {
+	cases := []struct {
+		name        string
+		args        []string
+		wantTarget  string
+		wantDir     string
+		wantTimeout time.Duration
+		wantErr     bool
+	}{
+		{"langage seul", []string{"php"}, "php", ".", 0, false},
+		{"langage et chemin", []string{"all", "examples"}, "all", "examples", 0, false},
+		{"avec --timeout", []string{"--timeout", "90s", "python", "src"}, "python", "src", 90 * time.Second, false},
+		{"sans argument", nil, "", "", 0, true},
+		{"trop d'arguments", []string{"php", "a", "b"}, "", "", 0, true},
+		{"--timeout invalide", []string{"--timeout", "bientôt", "php"}, "", "", 0, true},
+		{"option inconnue", []string{"--verbose", "php"}, "", "", 0, true},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			target, dir, timeout, err := parseTestArgs(c.args)
+			if (err != nil) != c.wantErr {
+				t.Fatalf("err = %v, wantErr %v", err, c.wantErr)
+			}
+			if c.wantErr {
+				return
+			}
+			if target != c.wantTarget || dir != c.wantDir || timeout != c.wantTimeout {
+				t.Errorf("= (%q, %q, %s), want (%q, %q, %s)", target, dir, timeout, c.wantTarget, c.wantDir, c.wantTimeout)
+			}
+		})
+	}
+}
+
+func TestRunCheck(t *testing.T) {
+	ok := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	defer ok.Close()
+	ko := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer ko.Close()
+
+	t.Run("toutes les cibles OK", func(t *testing.T) {
+		var out bytes.Buffer
+		if code := runCheck([]string{ok.URL}, &out); code != 0 {
+			t.Errorf("code = %d, want 0 (sortie: %s)", code, out.String())
+		}
+		if !strings.HasPrefix(out.String(), "OK  "+ok.URL) {
+			t.Errorf("sortie = %q, want une ligne \"OK  %s ...\"", out.String(), ok.URL)
+		}
+	})
+
+	t.Run("une cible KO suffit à échouer, toutes sont vérifiées", func(t *testing.T) {
+		var out bytes.Buffer
+		if code := runCheck([]string{ko.URL, ok.URL}, &out); code != 1 {
+			t.Errorf("code = %d, want 1", code)
+		}
+		lines := strings.Split(strings.TrimSpace(out.String()), "\n")
+		if len(lines) != 2 || !strings.HasPrefix(lines[0], "KO") || !strings.HasPrefix(lines[1], "OK") {
+			t.Errorf("sortie = %q, want une ligne KO puis une ligne OK", out.String())
+		}
+	})
+
+	t.Run("--status appliqué", func(t *testing.T) {
+		var out bytes.Buffer
+		if code := runCheck([]string{"--status", "500", ko.URL}, &out); code != 0 {
+			t.Errorf("code = %d, want 0 avec --status 500 (sortie: %s)", code, out.String())
+		}
+	})
+
+	t.Run("sans cible", func(t *testing.T) {
+		var out bytes.Buffer
+		if code := runCheck(nil, &out); code != 1 || !strings.Contains(out.String(), "usage") {
+			t.Errorf("code = %d, sortie = %q, want 1 et l'usage", code, out.String())
+		}
+	})
+
+	t.Run("option invalide", func(t *testing.T) {
+		var out bytes.Buffer
+		if code := runCheck([]string{"--status", "abc", ok.URL}, &out); code != 1 {
+			t.Errorf("code = %d, want 1", code)
+		}
+	})
 }

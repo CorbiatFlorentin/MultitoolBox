@@ -8,7 +8,9 @@ Détecte automatiquement le type de projet dans un dossier et délègue au vrai
 outil de test (pytest, phpunit, tsc, npm test...) plutôt que de le
 réimplémenter.
 
-Langages supportés aujourd'hui : **Python, React, PHP, TypeScript**. Le tout
+Langages supportés aujourd'hui : **Python, React, PHP, TypeScript**, plus des
+tests d'API **HTTP** (fichiers `.hurl` ou collections Postman) et un smoke test
+réseau intégré (`multitest check`). Le tout
 est pensé pour être facilement extensible à d'autres langages (voir
 [Ajouter un langage](#ajouter-un-langage)).
 
@@ -28,6 +30,7 @@ php
 python
 react
 typescript
+http
 
 $ multitest test all examples/demo-ts
 == typescript ==
@@ -50,14 +53,44 @@ multitest - lance les tests d'un projet, quel que soit son langage
 
 Usage:
   multitest                               (mode interactif)
-  multitest test <langage|all> [chemin]   (langages: python, react, php, typescript)
+  multitest test [--timeout 5m] <langage|all> [chemin]
+                                          (langages: python, react, php, typescript, http)
+  multitest check [--timeout 5s] [--status 200] <url|host:port>...
+                                          (smoke test réseau : HTTP ou port TCP)
   multitest list                          (langages supportés)
   multitest help                          (affiche cette aide)
 ```
 <!-- usage:end -->
 
 Sans `chemin`, le dossier courant est utilisé. Sans aucun argument, l'outil
-s'ouvre en mode interactif (menu au clavier).
+s'ouvre en mode interactif (menu au clavier). Les options (`--timeout`,
+`--status`) se placent avant les arguments.
+
+### PHP
+
+Le lanceur est choisi dans cet ordre : `php artisan test` (Laravel),
+`vendor/bin/pest`, `vendor/bin/phpunit` (tous lancés via `php`, ce qui marche
+aussi sous Windows), puis le script `test` de `composer.json`. Un
+`composer.json` sans aucun signe de tests (pas de `tests/`, de phpunit/pest ni
+de script `test`) n'est pas détecté par `test all`. Mini-projet d'exemple :
+[`examples/demo-php`](examples/demo-php) (`composer install` puis
+`multitest test php examples/demo-php`).
+
+### Réseau
+
+- `multitest test http` lance `hurl --test` sur les fichiers `.hurl` trouvés
+  (jusqu'à 2 niveaux de sous-dossiers, hors `node_modules`/`vendor`), sinon
+  `newman run` sur chaque `*.postman_collection.json`.
+- `multitest check` fait un GET sur une URL (OK si code < 400, ou égal à
+  `--status` ; les redirections ne sont pas suivies) ou ouvre une connexion
+  TCP sur `host:port`. Code de sortie 1 si une cible est KO.
+
+```
+$ multitest check https://github.com github.com:443 localhost:1
+OK  https://github.com  HTTP 200 (147ms)
+OK  github.com:443  port ouvert (20ms)
+KO  localhost:1  dial tcp [::1]:1: connectex: No connection could be made ... (2ms)
+```
 
 ## Installation
 
@@ -77,7 +110,9 @@ go test ./... -v
 ## CI
 
 Chaque push/PR sur `main` déclenche `.github/workflows/ci.yml` :
-- build, `go vet`, `go test`, vérification du formatage (`gofmt`)
+- build, `go vet`, `go test` (avec PHP + composer installés pour lancer le
+  test d'intégration de `examples/demo-php`), vérification du formatage
+  (`gofmt`)
 - compilation croisée (windows-amd64, linux-amd64, darwin-amd64, darwin-arm64),
   publiée en artefacts téléchargeables sur le run GitHub Actions
 - la section "Usage" ci-dessus est régénérée automatiquement à partir de

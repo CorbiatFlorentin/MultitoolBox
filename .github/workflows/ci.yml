@@ -23,6 +23,16 @@ jobs:
       - name: Vet
         run: go vet ./...
 
+      # PHP + composer pour le test d'intégration TestPhpDemoIntegration
+      # (ignoré localement si examples/demo-php/vendor est absent).
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          tools: composer
+
+      - name: Install examples/demo-php
+        run: composer install --no-interaction --no-progress --working-dir=examples/demo-php
+
       - name: Test
         run: go test ./... -v
 

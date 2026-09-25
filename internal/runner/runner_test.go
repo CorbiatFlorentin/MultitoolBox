@@ -44,29 +44,6 @@ func TestPythonDetect(t *testing.T) {
 	})
 }
 
-func TestPhpDetect(t *testing.T) {
-	cases := []string{"composer.json", "phpunit.xml", "phpunit.xml.dist"}
-
-	var r phpRunner
-
-	for _, file := range cases {
-		t.Run(file, func(t *testing.T) {
-			dir := t.TempDir()
-			writeFile(t, dir, file, "")
-			if !r.Detect(dir) {
-				t.Errorf("Detect() = false, want true avec %s présent", file)
-			}
-		})
-	}
-
-	t.Run("dossier vide", func(t *testing.T) {
-		dir := t.TempDir()
-		if r.Detect(dir) {
-			t.Error("Detect() = true, want false sur un dossier vide")
-		}
-	})
-}
-
 func TestTypescriptDetect(t *testing.T) {
 	var r typescriptRunner
 
@@ -155,28 +132,6 @@ func TestReactTestPropagatesFailure(t *testing.T) {
 	}
 }
 
-func TestPhpTestFallsBackToComposer(t *testing.T) {
-	out := withFakeCommand(t, "composer", 0)
-	var r phpRunner
-
-	// Pas de vendor/bin/phpunit : doit retomber sur "composer test".
-	if err := r.Test(t.TempDir()); err != nil {
-		t.Fatalf("Test() a retourné une erreur inattendue: %v", err)
-	}
-	if got, want := readOut(t, out), "test"; got != want {
-		t.Errorf("arguments passés à composer = %q, want %q", got, want)
-	}
-}
-
-func TestPhpTestPropagatesFailure(t *testing.T) {
-	withFakeCommand(t, "composer", 1)
-	var r phpRunner
-
-	if err := r.Test(t.TempDir()); err == nil {
-		t.Error("Test() = nil, want une erreur quand composer test échoue")
-	}
-}
-
 func TestTypescriptTestMissingTsc(t *testing.T) {
 	dir := t.TempDir()
 	var r typescriptRunner
@@ -236,7 +191,7 @@ func TestTypescriptTestStopsIfTscFails(t *testing.T) {
 }
 
 func TestRegistry(t *testing.T) {
-	for _, name := range []string{"python", "react", "php", "typescript"} {
+	for _, name := range []string{"python", "react", "php", "typescript", "http"} {
 		t.Run(name, func(t *testing.T) {
 			r, ok := Get(name)
 			if !ok {
